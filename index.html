@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>WebXR Sphere</title>
+    <title>Kaleidoscope XR</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       body {
@@ -19,46 +19,70 @@
       import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
       import { XRButton } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/webxr/XRButton.js';
 
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 1000);
+      let scene, camera, renderer, clock;
 
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.xr.enabled = true;
-      document.body.appendChild(renderer.domElement);
+      init();
 
-      // 球体の作成
-      const geometry = new THREE.SphereGeometry(0.2, 32, 32);
-      const material = new THREE.MeshStandardMaterial({ color: 0x0077ff });
-      const sphere = new THREE.Mesh(geometry, material);
-      sphere.position.set(0, 1.5, -1); // 目の高さに配置
-      scene.add(sphere);
+      function init() {
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-      // ライト
-      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-      light.position.set(0, 1, 0);
-      scene.add(light);
-
-      // WebXRボタン
-      document.body.appendChild(XRButton.createButton(renderer));
-
-      // アニメーションループ
-      function animate() {
-        renderer.setAnimationLoop(render);
-      }
-
-      function render() {
-        sphere.rotation.y += 0.01;
-        renderer.render(scene, camera);
-      }
-
-      animate();
-
-      window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
+        renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-      });
+        renderer.xr.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        document.body.appendChild(XRButton.createButton(renderer));
+
+        clock = new THREE.Clock();
+
+        // 球体ジオメトリに反転UVで内部テクスチャとして使用
+        const geometry = new THREE.SphereGeometry(10, 64, 64);
+        geometry.scale(-1, 1, 1); // 内側に描画
+
+        const material = new THREE.ShaderMaterial({
+          uniforms: {
+            time: { value: 0.0 }
+          },
+          vertexShader: `
+            varying vec2 vUv;
+            void main() {
+              vUv = uv;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `,
+          fragmentShader: `
+            precision highp float;
+            varying vec2 vUv;
+            uniform float time;
+
+            void main() {
+              vec2 p = vUv - 0.5;
+              float angle = atan(p.y, p.x);
+              float radius = length(p) * 2.0;
+              float kaleido = cos(6.0 * angle + time * 0.5);
+              float intensity = smoothstep(0.0, 1.0, sin(radius * 10.0 - time * 2.0));
+              vec3 color = vec3(0.5 + 0.5 * kaleido, 0.5 * intensity, 0.5 + 0.5 * sin(time));
+              gl_FragColor = vec4(color, 1.0);
+            }
+          `,
+          side: THREE.BackSide
+        });
+
+        const mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+
+        renderer.setAnimationLoop(() => {
+          material.uniforms.time.value = clock.getElapsedTime();
+          renderer.render(scene, camera);
+        });
+
+        window.addEventListener('resize', () => {
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+      }
     </script>
   </body>
 </html>
