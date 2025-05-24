@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Kaleidoscope XR</title>
+    <title>WebXR Kaleidoscope Space</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       body {
@@ -19,70 +19,103 @@
       import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
       import { XRButton } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/webxr/XRButton.js';
 
-      let scene, camera, renderer, clock;
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-      init();
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      document.body.appendChild(renderer.domElement);
+      document.body.appendChild(XRButton.createButton(renderer));
 
-      function init() {
-        scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      // 照明
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
 
-        renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.xr.enabled = true;
-        document.body.appendChild(renderer.domElement);
+      const pointLight = new THREE.PointLight(0xffffff, 1);
+      pointLight.position.set(0, 5, 0);
+      scene.add(pointLight);
 
-        document.body.appendChild(XRButton.createButton(renderer));
+      const objects = [];
 
-        clock = new THREE.Clock();
+      function getRandomColor() {
+        return new THREE.Color(Math.random(), Math.random(), Math.random());
+      }
 
-        // 球体ジオメトリに反転UVで内部テクスチャとして使用
-        const geometry = new THREE.SphereGeometry(10, 64, 64);
-        geometry.scale(-1, 1, 1); // 内側に描画
+      function createRandomObject() {
+        const types = ['sphere', 'cube', 'torus'];
+        const type = types[Math.floor(Math.random() * types.length)];
+        let geometry;
 
-        const material = new THREE.ShaderMaterial({
-          uniforms: {
-            time: { value: 0.0 }
-          },
-          vertexShader: `
-            varying vec2 vUv;
-            void main() {
-              vUv = uv;
-              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-          `,
-          fragmentShader: `
-            precision highp float;
-            varying vec2 vUv;
-            uniform float time;
+        const scale = Math.random() * 0.5 + 0.1;
 
-            void main() {
-              vec2 p = vUv - 0.5;
-              float angle = atan(p.y, p.x);
-              float radius = length(p) * 2.0;
-              float kaleido = cos(6.0 * angle + time * 0.5);
-              float intensity = smoothstep(0.0, 1.0, sin(radius * 10.0 - time * 2.0));
-              vec3 color = vec3(0.5 + 0.5 * kaleido, 0.5 * intensity, 0.5 + 0.5 * sin(time));
-              gl_FragColor = vec4(color, 1.0);
-            }
-          `,
-          side: THREE.BackSide
+        switch (type) {
+          case 'sphere':
+            geometry = new THREE.SphereGeometry(scale, 16, 16);
+            break;
+          case 'cube':
+            geometry = new THREE.BoxGeometry(scale, scale, scale);
+            break;
+          case 'torus':
+            geometry = new THREE.TorusGeometry(scale, scale / 4, 16, 100);
+            break;
+        }
+
+        const color = getRandomColor();
+        const material = new THREE.MeshStandardMaterial({
+          color: color,
+          emissive: color,
+          emissiveIntensity: 1.5,
+          roughness: 0.3,
+          metalness: 0.2,
         });
 
         const mesh = new THREE.Mesh(geometry, material);
+
+        // ランダムな初期位置
+        mesh.position.set(
+          (Math.random() - 0.5) * 10,
+          (Math.random() - 0.5) * 10 + 1.5,
+          (Math.random() - 0.5) * 10
+        );
+
+        // ランダムな速度
+        mesh.userData.velocity = new THREE.Vector3(
+          (Math.random() - 0.5) * 0.01,
+          (Math.random() - 0.5) * 0.01,
+          (Math.random() - 0.5) * 0.01
+        );
+
         scene.add(mesh);
-
-        renderer.setAnimationLoop(() => {
-          material.uniforms.time.value = clock.getElapsedTime();
-          renderer.render(scene, camera);
-        });
-
-        window.addEventListener('resize', () => {
-          camera.aspect = window.innerWidth / window.innerHeight;
-          camera.updateProjectionMatrix();
-          renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        objects.push(mesh);
       }
+
+      // 200個くらい生成
+      for (let i = 0; i < 200; i++) {
+        createRandomObject();
+      }
+
+      // アニメーション
+      renderer.setAnimationLoop(() => {
+        objects.forEach((obj) => {
+          obj.rotation.x += 0.01;
+          obj.rotation.y += 0.01;
+          obj.position.add(obj.userData.velocity);
+
+          // 空間をループさせる（万華鏡風の無限空間）
+          if (obj.position.length() > 8) {
+            obj.position.multiplyScalar(-1);
+          }
+        });
+
+        renderer.render(scene, camera);
+      });
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
     </script>
   </body>
 </html>
