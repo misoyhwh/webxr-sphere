@@ -75,7 +75,7 @@
         objects.forEach((obj) => {
           obj.rotation.x += 0.01;
           obj.rotation.y += 0.01;
-          obj.position.add(obj.userData.velocity);
+          //obj.position.add(obj.userData.velocity);
 
           // 空間をループさせる（万華鏡風の無限空間）
           if (obj.position.length() > 8) {
