@@ -47,14 +47,13 @@
         let geometry;
 
         const scale = Math.random() * 0.5 + 0.1;
-        geometry = new THREE.TorusGeometry(scale, scale / 4, 16, 100);
+        geometry = new THREE.BoxGeometry(scale, scale, scale);
 
         const color = getRandomColor();
-
         const material = new THREE.MeshStandardMaterial({
           color: color,
           emissive: color,
-          emissiveIntensity: 1.0,
+          //emissiveIntensity: 1.0,
           roughness: 0.3,
           metalness: 0.2,
         });
@@ -62,7 +61,7 @@
         const mesh = new THREE.Mesh(geometry, material);
 
         // 初期位置
-        mesh.position.set(1.0 , 1.0 , 1.0);
+        mesh.position.set(2.0 , 2.0 , 2.0);
 
         scene.add(mesh);
         objects.push(mesh);
