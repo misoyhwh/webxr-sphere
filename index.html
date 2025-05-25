@@ -24,9 +24,16 @@
 
       const renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
+      
+      // WebXR 設定
       renderer.xr.enabled = true;
+      renderer.xr.setReferenceSpaceType('local'); // より自由な頭部トラッキング
+      
       document.body.appendChild(renderer.domElement);
       document.body.appendChild(XRButton.createButton(renderer));
+
+      // カメラの初期位置を設定（WebXR時には自動的にトラッキング位置に置き換わる）
+      camera.position.set(0, 1.6, 0); // 平均的な目の高さ
 
       // シェーダーマテリアル用のユニフォーム
       const uniforms = {
@@ -99,7 +106,7 @@
       `;
 
       // 視界全体を覆う大きな球体を作成
-      const sphereGeometry = new THREE.SphereGeometry(500, 64, 64);
+      const sphereGeometry = new THREE.SphereGeometry(100, 64, 64); // 半径を小さく調整
       const shaderMaterial = new THREE.ShaderMaterial({
         uniforms: uniforms,
         vertexShader: vertexShader,
@@ -178,11 +185,29 @@
       // アニメーション
       const clock = new THREE.Clock();
 
+      // WebXRセッションの開始/終了イベント
+      renderer.xr.addEventListener('sessionstart', () => {
+        console.log('WebXR session started');
+      });
+
+      renderer.xr.addEventListener('sessionend', () => {
+        console.log('WebXR session ended');
+      });
+
       renderer.setAnimationLoop(() => {
         const elapsedTime = clock.getElapsedTime();
         
         // シェーダーの時間を更新
         uniforms.u_time.value = elapsedTime;
+
+        // WebXR時とデスクトップ時の両方に対応
+        if (renderer.xr.isPresenting) {
+          // VR中：ヘッドトラッキングが自動的に適用される
+          // 追加のカメラ制御は不要
+        } else {
+          // デスクトップ時：マウスでの簡易カメラ制御（オプション）
+          // 必要に応じてOrbitControlsなどを追加可能
+        }
 
         // オブジェクトのアニメーション
         objects.forEach((obj) => {
