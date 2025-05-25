@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>WebXR Kaleidoscope Space</title>
+    <title>WebXR Shader Kaleidoscope Space</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       body {
@@ -24,147 +24,188 @@
 
       const renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
-      // Web XR
       renderer.xr.enabled = true;
       document.body.appendChild(renderer.domElement);
       document.body.appendChild(XRButton.createButton(renderer));
 
-      // 照明
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-      scene.add(ambientLight);
-      const pointLight = new THREE.PointLight(0xffffff, 1);
-      pointLight.position.set(0, 5, 0);
-      scene.add(pointLight);
+      // シェーダーマテリアル用のユニフォーム
+      const uniforms = {
+        u_time: { value: 0.0 },
+        u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+      };
 
+      // バーテックスシェーダー
+      const vertexShader = `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `;
+
+      // フラグメントシェーダー（GLSLコードを組み込み）
+      const fragmentShader = `
+        uniform float u_time;
+        uniform vec2 u_resolution;
+        varying vec2 vUv;
+
+        // 3D回転行列
+        mat3 rotate3D(float angle, vec3 axis) {
+          axis = normalize(axis);
+          float s = sin(angle);
+          float c = cos(angle);
+          float oc = 1.0 - c;
+          
+          return mat3(
+            oc * axis.x * axis.x + c,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,
+            oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,
+            oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c
+          );
+        }
+
+        void main() {
+          vec2 FC = gl_FragCoord.xy;
+          vec2 r = u_resolution;
+          float t = u_time;
+          vec4 o = vec4(0.0);
+          
+          // 元のGLSLコードを適応
+          vec3 p = vec3((FC.xy * 2.0 - r) / r.y, 1.0) * rotate3D(t * 0.1, vec3(1.0));
+          vec3 q;
+          float i = 0.0;
+          float d = 0.0;
+          float g = 0.0;
+          
+          for(int iter = 0; iter < 99; iter++) {
+            i += 1.0;
+            if(i >= 99.0) break;
+            
+            q = normalize(p) * g;
+            q.y += pow(sin(t + q.z), 3.0);
+            
+            vec3 modQ = mod(q - vec3(0.0, 0.0, t), 4.0) - 2.0;
+            vec3 maxVec = max(abs(modQ) - 0.7, 0.0);
+            g += length(maxVec);
+            
+            o = vec4(g) * 0.06 * vec4(0.2, p.y * 0.1, p.z * 0.4, 1.0);
+          }
+          
+          // 色の調整
+          o.rgb = pow(o.rgb, vec3(0.8)); // ガンマ補正
+          o.rgb *= 2.0; // 明度アップ
+          
+          gl_FragColor = vec4(o.rgb, 1.0);
+        }
+      `;
+
+      // 視界全体を覆う大きな球体を作成
+      const sphereGeometry = new THREE.SphereGeometry(500, 64, 64);
+      const shaderMaterial = new THREE.ShaderMaterial({
+        uniforms: uniforms,
+        vertexShader: vertexShader,
+        fragmentShader: fragmentShader,
+        side: THREE.BackSide // 内側から見えるように
+      });
+
+      const sphere = new THREE.Mesh(sphereGeometry, shaderMaterial);
+      scene.add(sphere);
+
+      // 追加のオブジェクト（オプション）
       const objects = [];
 
       function getRandomColor() {
         return new THREE.Color(Math.random(), Math.random(), Math.random());
       }
 
-function createRandomObject() {
-  // 様々な図形タイプ
-  const types = ['sphere', 'cube', 'torus', 'cone', 'cylinder', 'octahedron'];
-  const type = types[Math.floor(Math.random() * types.length)];
-  let geometry;
+      function createRandomObject() {
+        const types = ['sphere', 'cube', 'torus'];
+        const type = types[Math.floor(Math.random() * types.length)];
+        let geometry;
 
-  // 様々な大きさ
-  const scale = Math.random() * 0.8 + 0.1; // 0.1 〜 0.9
+        const scale = Math.random() * 0.3 + 0.1;
 
-  switch (type) {
-    case 'sphere':
-      geometry = new THREE.SphereGeometry(scale, 16, 16);
-      break;
-    case 'cube':
-      geometry = new THREE.BoxGeometry(scale, scale, scale);
-      break;
-    case 'torus':
-      geometry = new THREE.TorusGeometry(scale, scale / 4, 16, 100);
-      break;
-    case 'cone':
-      geometry = new THREE.ConeGeometry(scale, scale * 1.5, 16);
-      break;
-    case 'cylinder':
-      geometry = new THREE.CylinderGeometry(scale, scale, scale * 1.2, 16);
-      break;
-    case 'octahedron':
-      geometry = new THREE.OctahedronGeometry(scale);
-      break;
-  }
+        switch (type) {
+          case 'sphere':
+            geometry = new THREE.SphereGeometry(scale, 16, 16);
+            break;
+          case 'cube':
+            geometry = new THREE.BoxGeometry(scale, scale, scale);
+            break;
+          case 'torus':
+            geometry = new THREE.TorusGeometry(scale, scale / 4, 16, 100);
+            break;
+        }
 
-  const color = getRandomColor();
-  const material = new THREE.MeshStandardMaterial({
-    color: color,
-    emissive: color,
-    emissiveIntensity: Math.random() * 2 + 0.5, // 0.5 〜 2.5の光り具合
-    roughness: 0.3,
-    metalness: 0.2,
-  });
+        const color = getRandomColor();
+        const material = new THREE.MeshStandardMaterial({
+          color: color,
+          emissive: color,
+          emissiveIntensity: 1.5,
+          roughness: 0.3,
+          metalness: 0.2,
+          transparent: true,
+          opacity: 0.7
+        });
 
-  const mesh = new THREE.Mesh(geometry, material);
+        const mesh = new THREE.Mesh(geometry, material);
 
-  // 円弧飛行用のパラメータを設定
-  mesh.userData = {
-    // 円弧の中心点
-    centerX: (Math.random() - 0.5) * 10,
-    centerY: (Math.random() - 0.5) * 5,
-    centerZ: (Math.random() - 0.5) * 10,
-    
-    // 円弧の半径
-    radius: Math.random() * 3 + 1, // 1 〜 4
-    
-    // 回転速度（円弧を描く速度）
-    orbitSpeed: (Math.random() - 0.5) * 0.05, // -0.025 〜 0.025
-    
-    // 現在の角度
-    angle: Math.random() * Math.PI * 2,
-    
-    // Y軸方向の振動
-    yOffset: Math.random() * 2,
-    ySpeed: (Math.random() - 0.5) * 0.03,
-    
-    // Z軸方向の変化
-    zSpeed: (Math.random() - 0.5) * 0.02
-  };
+        // ランダムな位置と移動パラメータ
+        mesh.position.set(
+          (Math.random() - 0.5) * 20,
+          (Math.random() - 0.5) * 20,
+          (Math.random() - 0.5) * 20
+        );
 
-  // 初期位置を計算
-  const x = mesh.userData.centerX + Math.cos(mesh.userData.angle) * mesh.userData.radius;
-  const y = mesh.userData.centerY + mesh.userData.yOffset;
-  const z = mesh.userData.centerZ + Math.sin(mesh.userData.angle) * mesh.userData.radius;
-  
-  mesh.position.set(x, y, z);
+        mesh.userData.velocity = new THREE.Vector3(
+          (Math.random() - 0.5) * 0.02,
+          (Math.random() - 0.5) * 0.02,
+          (Math.random() - 0.5) * 0.02
+        );
 
-  scene.add(mesh);
-  objects.push(mesh);
-}
+        scene.add(mesh);
+        objects.push(mesh);
+      }
 
-// たくさん生成（50個程度）
-for (let i = 0; i < 50; i++) {
-  createRandomObject();
-}
+      // いくつかのオブジェクトを追加
+      for (let i = 0; i < 30; i++) {
+        createRandomObject();
+      }
 
-      // 生成
-      createRandomObject();
+      // 照明
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+      scene.add(ambientLight);
 
       // アニメーション
-renderer.setAnimationLoop(() => {
-  objects.forEach((obj) => {
-    // 自転
-    obj.rotation.x += 0.02;
-    obj.rotation.y += 0.01;
-    obj.rotation.z += 0.015;
-    
-    // 円弧軌道の更新
-    obj.userData.angle += obj.userData.orbitSpeed;
-    obj.userData.yOffset += obj.userData.ySpeed;
-    
-    // 新しい位置を計算
-    const x = obj.userData.centerX + Math.cos(obj.userData.angle) * obj.userData.radius;
-    const y = obj.userData.centerY + obj.userData.yOffset + Math.sin(obj.userData.angle * 2) * 0.5;
-    const z = obj.userData.centerZ + Math.sin(obj.userData.angle) * obj.userData.radius;
-    
-    obj.position.set(x, y, z);
-    
-    // Y方向の振動を制限
-    if (Math.abs(obj.userData.yOffset) > 3) {
-      obj.userData.ySpeed *= -1;
-    }
-    
-    // 万華鏡効果（オプション）
-    if (obj.position.length() > 12) {
-      obj.userData.centerX *= -0.8;
-      obj.userData.centerY *= -0.8;
-      obj.userData.centerZ *= -0.8;
-    }
-  });
+      const clock = new THREE.Clock();
 
-  renderer.render(scene, camera);
-});
+      renderer.setAnimationLoop(() => {
+        const elapsedTime = clock.getElapsedTime();
+        
+        // シェーダーの時間を更新
+        uniforms.u_time.value = elapsedTime;
+
+        // オブジェクトのアニメーション
+        objects.forEach((obj) => {
+          obj.rotation.x += 0.01;
+          obj.rotation.y += 0.015;
+          obj.position.add(obj.userData.velocity);
+
+          // 境界でバウンス
+          if (Math.abs(obj.position.x) > 10) obj.userData.velocity.x *= -1;
+          if (Math.abs(obj.position.y) > 10) obj.userData.velocity.y *= -1;
+          if (Math.abs(obj.position.z) > 10) obj.userData.velocity.z *= -1;
+        });
+
+        renderer.render(scene, camera);
+      });
 
       window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
+        
+        // 解像度ユニフォームを更新
+        uniforms.u_resolution.value.set(window.innerWidth, window.innerHeight);
       });
     </script>
   </body>
